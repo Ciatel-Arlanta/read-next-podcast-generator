@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ReadNext — Convert any article into an AI-generated two-person podcast using open-source models.">
+    <title>ReadNext — AI Podcast Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Animated Background Orbs -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">🎙️</span>
+                <h1>ReadNext</h1>
+            </div>
+            <p class="tagline">Turn any article into a podcast — powered by open-source AI</p>
+        </header>
+
+        <!-- Input Section -->
+        <section class="input-section glass-card" id="input-section">
+            <h2>What do you want to listen to?</h2>
+
+            <div class="input-tabs">
+                <button class="tab-btn active" data-tab="url" id="tab-url">🔗 Paste URL</button>
+                <button class="tab-btn" data-tab="text" id="tab-text">📝 Paste Text</button>
+            </div>
+
+            <div class="input-body">
+                <div class="tab-content active" id="content-url">
+                    <input
+                        type="url"
+                        id="url-input"
+                        class="text-input"
+                        placeholder="https://example.com/interesting-article"
+                        autocomplete="off"
+                    >
+                </div>
+                <div class="tab-content" id="content-text">
+                    <textarea
+                        id="text-input"
+                        class="text-input textarea"
+                        placeholder="Paste your article, blog post, or notes here..."
+                        rows="6"
+                    ></textarea>
+                </div>
+            </div>
+
+            <button class="generate-btn" id="generate-btn">
+                <span class="btn-text">Generate Podcast</span>
+                <span class="btn-icon">→</span>
+            </button>
+        </section>
+
+        <!-- Progress Section (hidden by default) -->
+        <section class="progress-section glass-card hidden" id="progress-section">
+            <div class="progress-header">
+                <div class="spinner"></div>
+                <h2 id="progress-title">Working on it...</h2>
+            </div>
+            <div class="progress-steps">
+                <div class="step" id="step-scrape">
+                    <span class="step-dot"></span>
+                    <span class="step-label">Fetching article content</span>
+                </div>
+                <div class="step" id="step-script">
+                    <span class="step-dot"></span>
+                    <span class="step-label">Writing podcast script</span>
+                </div>
+                <div class="step" id="step-audio">
+                    <span class="step-dot"></span>
+                    <span class="step-label">Generating speech with AI voices</span>
+                </div>
+                <div class="step" id="step-stitch">
+                    <span class="step-dot"></span>
+                    <span class="step-label">Stitching final audio</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section (hidden by default) -->
+        <section class="results-section hidden" id="results-section">
+
+            <!-- Player Card -->
+            <div class="player-card glass-card">
+                <div class="player-header">
+                    <div class="now-playing-badge">NOW PLAYING</div>
+                    <h2 class="episode-title" id="episode-title">Episode Title</h2>
+                </div>
+
+                <div class="player-controls">
+                    <audio id="audio-player" preload="auto"></audio>
+
+                    <div class="waveform-bar" id="waveform-bar">
+                        <div class="waveform-progress" id="waveform-progress"></div>
+                        <div class="waveform-handle" id="waveform-handle"></div>
+                    </div>
+
+                    <div class="time-display">
+                        <span id="time-current">0:00</span>
+                        <span id="time-total">0:00</span>
+                    </div>
+
+                    <div class="control-buttons">
+                        <button class="ctrl-btn" id="btn-rewind" title="Rewind 10s">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="12" y="16" text-anchor="middle" fill="currentColor" stroke="none" font-size="8" font-weight="bold">10</text></svg>
+                        </button>
+                        <button class="ctrl-btn play-btn" id="btn-play" title="Play/Pause">
+                            <svg class="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <svg class="icon-pause hidden" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                        </button>
+                        <button class="ctrl-btn" id="btn-forward" title="Forward 10s">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="12" y="16" text-anchor="middle" fill="currentColor" stroke="none" font-size="8" font-weight="bold">10</text></svg>
+                        </button>
+                        <button class="ctrl-btn" id="btn-download" title="Download MP3">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transcript Card -->
+            <div class="transcript-card glass-card">
+                <div class="transcript-header">
+                    <h3>📜 Transcript</h3>
+                    <span class="speaker-legend">
+                        <span class="legend-dot host"></span> Host
+                        <span class="legend-dot guest"></span> Guest
+                    </span>
+                </div>
+                <div class="transcript-body" id="transcript-body">
+                    <!-- Dialogue lines rendered here by JS -->
+                </div>
+            </div>
+
+            <!-- Generate Another -->
+            <button class="generate-another-btn" id="btn-new">
+                ← Generate Another Podcast
+            </button>
+        </section>
+
+        <!-- Error Toast -->
+        <div class="error-toast hidden" id="error-toast">
+            <span class="error-icon">⚠️</span>
+            <span class="error-message" id="error-message">Something went wrong.</span>
+            <button class="error-close" id="error-close">✕</button>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

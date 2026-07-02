@@ -10,15 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to Hugging Face
+      - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ secrets.HF_SPACE }}
         run: |
-          git remote add space https://user:$HF_TOKEN@huggingface.co/spaces/$HF_SPACE
-          git push --force space main
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Detect the current branch name
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "Deploying branch '$BRANCH' to Hugging Face Space: $HF_SPACE"
+
+          git remote add space https://user:$HF_TOKEN@huggingface.co/spaces/$HF_SPACE || true
+          git push --force space $BRANCH:main
+
+          echo "✅ Successfully deployed to https://huggingface.co/spaces/$HF_SPACE"

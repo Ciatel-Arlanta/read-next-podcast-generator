@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+.env*
+*.gguf
+*.mp3
+*.wav
+temp_audio/
+model_cache/
+venv/
+.idea/
+.vscode/
+.DS_Store

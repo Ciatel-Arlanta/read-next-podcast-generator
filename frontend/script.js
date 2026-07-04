@@ -65,6 +65,7 @@ const errorClose  = $('#error-close');
 // =====================================================================
 
 let currentTiming = [];   // Array of { index, speaker, text, start_s, end_s }
+let currentTimingByIndex = new Map();
 let currentAudioUrl = '';
 let activeTab = 'url';    // 'url' or 'text'
 
@@ -216,6 +217,7 @@ function showResults(data) {
 
     // Store timing data
     currentTiming = data.timing || [];
+    currentTimingByIndex = new Map(currentTiming.map(t => [t.index, t]));
 
     // Render transcript
     renderTranscript(data.dialogue, data.timing);
@@ -249,7 +251,7 @@ function renderTranscript(dialogue, timing) {
 
         // Click to seek
         el.addEventListener('click', () => {
-            const t = timing[i];
+            const t = currentTimingByIndex.get(i);
             if (t && audioPlayer.duration) {
                 audioPlayer.currentTime = t.start_s;
                 if (audioPlayer.paused) {
@@ -359,7 +361,7 @@ function updateActiveTranscriptLine(currentTime) {
     const lines = $$('.dialogue-line');
 
     lines.forEach((el, i) => {
-        const t = currentTiming[i];
+        const t = currentTimingByIndex.get(i);
         if (!t) return;
 
         if (currentTime >= t.start_s && currentTime < t.end_s) {

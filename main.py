@@ -10,17 +10,18 @@ import os
 import re
 import uuid
 import logging
-import asyncio
+import socket
+import ipaddress
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
 
 from generator import generate_script
 from tts_engine import generate_podcast_audio, AUDIO_CACHE_DIR
@@ -73,6 +74,73 @@ class PodcastResponse(BaseModel):
 # URL Scraping
 # ---------------------------------------------------------------------------
 
+MAX_REDIRECTS = 5
+SESSION_ID_PATTERN = re.compile(r"^[a-f0-9]{12}$")
+
+
+def _is_public_hostname(hostname: str) -> bool:
+    """Return True only when every resolved address is public internet-routable."""
+    if hostname.lower() == "localhost" or hostname.lower().endswith(".localhost"):
+        return False
+
+    try:
+        ipaddress.ip_address(hostname)
+        addresses = {hostname}
+    except ValueError:
+        try:
+            addrinfo = socket.getaddrinfo(hostname, None)
+        except socket.gaierror:
+            return False
+        addresses = {item[4][0] for item in addrinfo}
+
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if not ip.is_global:
+            return False
+    return True
+
+
+def _validate_public_url(url: str) -> str:
+    """Validate that a user-provided URL is safe for server-side fetching."""
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="URL must use http or https.")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must include a hostname.")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="URL must not include credentials.")
+    if not _is_public_hostname(parsed.hostname):
+        raise HTTPException(status_code=400, detail="URL host is not allowed.")
+    return parsed.geturl()
+
+
+def _fetch_public_url(url: str, headers: dict[str, str]) -> requests.Response:
+    """Fetch a validated public URL while re-validating every redirect target."""
+    current_url = _validate_public_url(url)
+
+    for _ in range(MAX_REDIRECTS + 1):
+        try:
+            response = requests.get(
+                current_url,
+                headers=headers,
+                timeout=(5, 15),
+                allow_redirects=False,
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+
+        if not response.is_redirect:
+            return response
+
+        location = response.headers.get("Location")
+        if not location:
+            raise HTTPException(status_code=400, detail="Redirect response did not include a location.")
+        current_url = _validate_public_url(urljoin(current_url, location))
+
+    raise HTTPException(status_code=400, detail="Too many redirects while fetching URL.")
+
+
 def _scrape_url(url: str) -> str:
     """Extract the main text content from a URL."""
     headers = {
@@ -83,11 +151,7 @@ def _scrape_url(url: str) -> str:
         )
     }
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+    resp = _fetch_public_url(url, headers)
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -111,7 +175,8 @@ def _scrape_url(url: str) -> str:
     if len(text) < 50:
         raise HTTPException(status_code=400, detail="Extracted text is too short to generate a podcast.")
 
-    logger.info("Scraped %d characters from %s", len(text), url)
+    parsed = urlparse(url)
+    logger.info("Scraped %d characters from %s://%s", len(text), parsed.scheme, parsed.hostname)
     return text
 
 
@@ -194,7 +259,19 @@ async def generate_podcast(req: PodcastRequest):
 @app.get("/api/audio/{session_id}/{filename}")
 async def serve_audio(session_id: str, filename: str):
     """Serve a generated audio file."""
-    file_path = AUDIO_CACHE_DIR / session_id / filename
+    if not SESSION_ID_PATTERN.fullmatch(session_id) or filename != "podcast.mp3":
+        raise HTTPException(status_code=404, detail="Audio file not found.")
+
+    cache_root = AUDIO_CACHE_DIR.resolve()
+    session_dir = (cache_root / session_id).resolve()
+    file_path = (session_dir / filename).resolve()
+
+    try:
+        file_path.relative_to(session_dir)
+        session_dir.relative_to(cache_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Audio file not found.")
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found.")
     return FileResponse(

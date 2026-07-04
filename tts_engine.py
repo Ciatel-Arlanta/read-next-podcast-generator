@@ -9,11 +9,9 @@ into a single podcast MP3 using pydub.
 import os
 import logging
 import asyncio
-import tempfile
 import uuid
 from pathlib import Path
 
-import numpy as np
 import soundfile as sf
 from pydub import AudioSegment
 
@@ -60,7 +58,7 @@ def _get_kokoro():
         )
 
     model_path = MODEL_DIR / "kokoro-v0_19.onnx"
-    voices_path = MODEL_DIR / "voices.bin"
+    voices_path = MODEL_DIR / "voices.json"
 
     if model_path.exists() and voices_path.exists():
         logger.info("Loading Kokoro from pre-downloaded files: %s", model_path)
@@ -134,7 +132,7 @@ async def generate_podcast_audio(
     session_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Synthesize each line individually
-    clip_paths = []
+    clips = []
     for i, line in enumerate(dialogue):
         speaker = line.get("speaker", "Host")
         text = line.get("text", "")
@@ -142,28 +140,34 @@ async def generate_podcast_audio(
             continue
         clip_path = session_dir / f"line_{i:03d}_{speaker.lower()}.wav"
         await _synthesize_line(text, speaker, clip_path)
-        clip_paths.append(clip_path)
+        clips.append({
+            "path": clip_path,
+            "index": i,
+            "speaker": speaker,
+            "text": text,
+        })
 
-    if not clip_paths:
+    if not clips:
         raise ValueError("No audio clips were generated.")
 
     # Step 2: Stitch clips together with pauses
-    logger.info("Stitching %d clips into final podcast...", len(clip_paths))
+    logger.info("Stitching %d clips into final podcast...", len(clips))
     silence = AudioSegment.silent(duration=PAUSE_BETWEEN_SPEAKERS_MS)
     combined = AudioSegment.empty()
     timing = []
     current_ms = 0
 
-    for i, clip_path in enumerate(clip_paths):
+    for clip in clips:
+        clip_path = clip["path"]
         segment = AudioSegment.from_wav(str(clip_path))
 
         # Record timing metadata for this line
         start_ms = current_ms
         end_ms = current_ms + len(segment)
         timing.append({
-            "index": i,
-            "speaker": dialogue[i].get("speaker", "Host"),
-            "text": dialogue[i].get("text", ""),
+            "index": clip["index"],
+            "speaker": clip["speaker"],
+            "text": clip["text"],
             "start_s": round(start_ms / 1000, 2),
             "end_s": round(end_ms / 1000, 2),
         })
@@ -177,9 +181,9 @@ async def generate_podcast_audio(
     logger.info("Final podcast saved: %s (%.1fs)", output_path, len(combined) / 1000)
 
     # Clean up individual WAV clips to save disk
-    for clip_path in clip_paths:
+    for clip in clips:
         try:
-            clip_path.unlink()
+            clip["path"].unlink()
         except OSError:
             pass
 

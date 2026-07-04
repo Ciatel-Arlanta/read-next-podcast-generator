@@ -27,21 +27,59 @@ It is designed to run entirely on open-source, local-friendly models:
 
 ### Installation
 1. Clone this repository.
-2. Install dependencies:
+2. Create and activate a virtual environment:
    ```bash
-   pip install -r requirements.txt
+   python3 -m venv .venv
+   source .venv/bin/activate
    ```
-3. Set your Hugging Face and/or Gemini keys (optional fallback):
+3. Install runtime dependencies:
+   ```bash
+   python3 -m pip install -r requirements.txt
+   ```
+4. Install test/development dependencies:
+   ```bash
+   python3 -m pip install -r requirements-dev.txt
+   ```
+5. Configure a generation backend. Use either Hugging Face Serverless Inference:
    ```bash
    export HF_TOKEN="your_hugging_face_token"
    ```
+   or a local GGUF model:
+   ```bash
+   export LOCAL_MODEL_PATH="/absolute/path/to/model.gguf"
+   ```
+
+### Environment Variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `HF_TOKEN` | One backend required | Hugging Face token used for Gemma-2-2b-it script generation. |
+| `LOCAL_MODEL_PATH` | One backend required | Path to a local GGUF model for `llama-cpp-python` generation. |
+| `AUDIO_CACHE_DIR` | No | Directory for generated MP3 files. Defaults to `/tmp/podcast_audio`. |
+| `KOKORO_MODEL_DIR` | No | Directory containing `kokoro-v0_19.onnx` and `voices.json`. Defaults to `model_cache`. |
+
+Copy `.env.example` for a local reference. The app reads environment variables from the process environment; it does not automatically load `.env` files.
+
+### Tests
+
+Run the fast regression suite:
+```bash
+python3 -m pytest
+```
 
 ### Execution
 Start the FastAPI server:
 ```bash
-uvicorn main:app --reload --port 7860
+python3 -m uvicorn main:app --reload --port 7860
 ```
 Then open `http://localhost:7860` in your browser.
+
+### Troubleshooting
+
+* If MP3 export fails, confirm `ffmpeg` is installed and available on `PATH`.
+* If script generation fails with "No generation backend available", set either `HF_TOKEN` or `LOCAL_MODEL_PATH`.
+* If Kokoro downloads models at runtime, set `KOKORO_MODEL_DIR` to a directory containing `kokoro-v0_19.onnx` and `voices.json`, or let Docker pre-download them into `model_cache`.
+* Generated MP3 files are stored in `AUDIO_CACHE_DIR`, which defaults to `/tmp/podcast_audio`. Clear that directory if local test runs leave old generated files behind.
 
 ---
 

@@ -1,7 +1,7 @@
 """
 generator.py — Podcast Script Writer Agent
 
-Uses Gemma-2-2b-it via Hugging Face's free Serverless Inference API
+Uses a Hugging Face Inference Providers chat model
 to convert article text into a structured two-person podcast script.
 Falls back to a local GGUF model via llama-cpp-python if available.
 """
@@ -11,9 +11,15 @@ import os
 import re
 import logging
 from dataclasses import dataclass, field, asdict
-from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_HF_MODEL_ID = "openai/gpt-oss-120b:fastest"
+
+try:
+    from huggingface_hub import get_token as _hf_get_token
+except ImportError:
+    _hf_get_token = None
 
 # ---------------------------------------------------------------------------
 # Data Models
@@ -122,23 +128,46 @@ def _parse_script(data: dict) -> PodcastScript:
 # Generator Backends
 # ---------------------------------------------------------------------------
 
-def _generate_via_hf_api(article_text: str, model_id: str = "google/gemma-2-2b-it") -> str:
+def _get_hf_token() -> str | None:
+    """Return a Hugging Face token from the environment or CLI login cache."""
+    env_token = os.environ.get("HF_TOKEN")
+    if env_token:
+        return env_token
+
+    if _hf_get_token:
+        return _hf_get_token()
+    return None
+
+
+def _get_hf_model_id() -> str:
+    """Return the configured Hugging Face Inference Providers model ID."""
+    return os.environ.get("HF_MODEL_ID", DEFAULT_HF_MODEL_ID)
+
+
+def _generate_via_hf_api(article_text: str, model_id: str | None = None) -> str:
     """Call the free Hugging Face Serverless Inference API."""
     from huggingface_hub import InferenceClient
 
-    token = os.environ.get("HF_TOKEN")
+    model_id = model_id or _get_hf_model_id()
+    token = _get_hf_token()
     client = InferenceClient(model=model_id, token=token)
+    prompt = SYSTEM_PROMPT + "\n\n" + USER_PROMPT_TEMPLATE.format(article_text=article_text)
 
-    messages = [
-        {"role": "user", "content": SYSTEM_PROMPT + "\n\n" + USER_PROMPT_TEMPLATE.format(article_text=article_text)},
-    ]
+    if hasattr(client, "chat_completion"):
+        messages = [{"role": "user", "content": prompt}]
+        response = client.chat_completion(
+            messages=messages,
+            max_tokens=2048,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content
 
-    response = client.chat_completion(
-        messages=messages,
-        max_tokens=2048,
+    return client.text_generation(
+        prompt,
+        max_new_tokens=2048,
         temperature=0.7,
+        return_full_text=False,
     )
-    return response.choices[0].message.content
 
 
 def _generate_via_llama_cpp(article_text: str, model_path: str) -> str:
@@ -178,8 +207,8 @@ def generate_script(article_text: str) -> PodcastScript:
     Generate a podcast script from article text.
 
     Tries the HF Inference API first (fast, free, no local model needed).
-    Falls back to a local GGUF model if HF_TOKEN is not set and a local
-    model file is available.
+    Falls back to a local GGUF model if no Hugging Face token is available
+    and a local model file is available.
     """
     # Truncate very long articles to avoid token limits
     max_chars = 6000
@@ -190,9 +219,9 @@ def generate_script(article_text: str) -> PodcastScript:
     local_model_path = os.environ.get("LOCAL_MODEL_PATH")
 
     # Strategy 1: HF Inference API (preferred — fast, free)
-    hf_token = os.environ.get("HF_TOKEN")
+    hf_token = _get_hf_token()
     if hf_token:
-        logger.info("Using Hugging Face Inference API (Gemma-2-2b-it)")
+        logger.info("Using Hugging Face Inference API (%s)", _get_hf_model_id())
         try:
             raw = _generate_via_hf_api(article_text)
             data = _extract_json(raw)

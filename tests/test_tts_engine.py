@@ -4,6 +4,36 @@ import pytest
 import tts_engine
 
 
+def test_patch_phonemizer_espeak_data_path_adds_missing_method(monkeypatch):
+    from phonemizer.backend.espeak.wrapper import EspeakWrapper
+
+    monkeypatch.delattr(EspeakWrapper, "set_data_path", raising=False)
+
+    tts_engine._patch_phonemizer_espeak_data_path()
+
+    assert hasattr(EspeakWrapper, "set_data_path")
+
+
+def test_ensure_kokoro_model_files_downloads_missing_assets(tmp_path, monkeypatch):
+    downloaded = []
+
+    def fake_download(url, destination):
+        downloaded.append((url, destination.name))
+        destination.write_bytes(b"asset")
+
+    monkeypatch.setattr(tts_engine, "MODEL_DIR", tmp_path)
+    monkeypatch.setattr(tts_engine, "_download_file", fake_download)
+
+    model_path, voices_path = tts_engine._ensure_kokoro_model_files()
+
+    assert model_path == tmp_path / tts_engine.KOKORO_MODEL_FILENAME
+    assert voices_path == tmp_path / tts_engine.KOKORO_VOICES_FILENAME
+    assert downloaded == [
+        (tts_engine.KOKORO_MODEL_URL, tts_engine.KOKORO_MODEL_FILENAME),
+        (tts_engine.KOKORO_VOICES_URL, tts_engine.KOKORO_VOICES_FILENAME),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_generate_podcast_audio_keeps_original_indexes_for_skipped_lines(tmp_path, monkeypatch):
     monkeypatch.setattr(tts_engine, "AUDIO_CACHE_DIR", tmp_path)

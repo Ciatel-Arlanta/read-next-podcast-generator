@@ -13,7 +13,7 @@ pinned: true
 ReadNext is an AI-powered podcast generator that converts articles, markdown text, or web URLs into engaging, natural-sounding two-person podcasts. 
 
 It is designed to run entirely on open-source, local-friendly models:
-* **Script Writer:** Gemma-2-2b-it (local GGUF or free HF Serverless API)
+* **Script Writer:** Hugging Face Inference Providers chat model or local GGUF
 * **Dialogue Text-to-Speech:** Kokoro-82M ONNX model (highly optimized CPU inference)
 * **Audio Stitching:** Pydub/FFmpeg
 
@@ -43,6 +43,7 @@ It is designed to run entirely on open-source, local-friendly models:
 5. Configure a generation backend. Use either Hugging Face Serverless Inference:
    ```bash
    export HF_TOKEN="your_hugging_face_token"
+   export HF_MODEL_ID="openai/gpt-oss-120b:fastest"
    ```
    or a local GGUF model:
    ```bash
@@ -53,10 +54,11 @@ It is designed to run entirely on open-source, local-friendly models:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `HF_TOKEN` | One backend required | Hugging Face token used for Gemma-2-2b-it script generation. |
+| `HF_TOKEN` | One backend required | Hugging Face token used for hosted script generation. |
+| `HF_MODEL_ID` | No | Hosted Hugging Face model ID. Defaults to `openai/gpt-oss-120b:fastest`. |
 | `LOCAL_MODEL_PATH` | One backend required | Path to a local GGUF model for `llama-cpp-python` generation. |
 | `AUDIO_CACHE_DIR` | No | Directory for generated MP3 files. Defaults to `/tmp/podcast_audio`. |
-| `KOKORO_MODEL_DIR` | No | Directory containing `kokoro-v0_19.onnx` and `voices.json`. Defaults to `model_cache`. |
+| `KOKORO_MODEL_DIR` | No | Directory containing `kokoro-v0_19.onnx` and `voices.json`. Defaults to `model_cache`; missing files are downloaded at first TTS use. |
 
 Copy `.env.example` for a local reference. The app reads environment variables from the process environment; it does not automatically load `.env` files.
 
@@ -78,7 +80,7 @@ Then open `http://localhost:7860` in your browser.
 
 * If MP3 export fails, confirm `ffmpeg` is installed and available on `PATH`.
 * If script generation fails with "No generation backend available", set either `HF_TOKEN` or `LOCAL_MODEL_PATH`.
-* If Kokoro downloads models at runtime, set `KOKORO_MODEL_DIR` to a directory containing `kokoro-v0_19.onnx` and `voices.json`, or let Docker pre-download them into `model_cache`.
+* If Kokoro model download fails at runtime, set `KOKORO_MODEL_DIR` to a directory containing `kokoro-v0_19.onnx` and `voices.json`, or let Docker pre-download them into `model_cache`.
 * Generated MP3 files are stored in `AUDIO_CACHE_DIR`, which defaults to `/tmp/podcast_audio`. Clear that directory if local test runs leave old generated files behind.
 
 ---
